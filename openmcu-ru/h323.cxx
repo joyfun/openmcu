@@ -2426,16 +2426,16 @@ class TplCleanCheckThread : public PThread
     PString n, a;
 };
 
-void OpenMCUH323Connection::CleanUpOnCallEnd()
+void MCUH323Connection::CleanUpOnCallEnd()
 {
-  PTRACE(2, "OpenMCUH323Connection\tCleanUpOnCallEnd");
+  PTRACE(2, "MCUH323Connection\tCleanUpOnCallEnd");
   BOOL lock=FALSE;
   Conference *c = conference;
   if(c==NULL)
   {
-    PTRACE(3,"OpenMCUH323Connection\tNULL Pointer, finding " << requestedRoom);
+    PTRACE(3,"MCUH323Connection\tNULL Pointer, finding " << requestedRoom);
     c = OpenMCU::Current().GetEndpoint().GetConferenceManager().FindConferenceWithLock(requestedRoom);
-    PTRACE(4,"OpenMCUH323Connection\tNew pointer: " << c);
+    PTRACE(4,"MCUH323Connection\tNew pointer: " << c);
     if(c) lock=TRUE;
   }
 
@@ -2443,7 +2443,7 @@ void OpenMCUH323Connection::CleanUpOnCallEnd()
   {
     if(!c->stopping)
     {
-      PTRACE(4,"OpenMCUH323Connection\tStarting new thread which will check the connection later in template.cxx");
+      PTRACE(4,"MCUH323Connection\tStarting new thread which will check the connection later in template.cxx");
       new TplCleanCheckThread(c, remotePartyName, remotePartyAddress);
     }
   }

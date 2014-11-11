@@ -1342,6 +1342,7 @@ class Conference : public PObject
     BOOL StartRecorder();
     BOOL StopRecorder();
 
+    BOOL stopping;
     BOOL lockedTemplate;
 
   protected:

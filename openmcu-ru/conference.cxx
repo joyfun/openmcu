@@ -138,14 +138,14 @@ void ConferenceManager::OnCreateConference(Conference * conference)
   if(timeLimit > 0)
     monitor->AddMonitorEvent(new ConferenceTimeLimitInfo(conference->GetID(), PTime() + timeLimit*1000));
 
+  if(MCUConfig("Export Parameters").GetBoolean("Enable export", TRUE) == TRUE)
+    new ConferencePipeMember(conference);
+
   // add file recorder member
   if(!GetConferenceParam(conference->GetNumber(), RoomAllowRecordKey, TRUE))
     return;
 
-  conference->fileRecorder = new ConferenceFileMember(conference, (const PString) "recorder" , PFile::WriteOnly);
-#ifndef _WIN32
   conference->conferenceRecorder = new ConferenceRecorder(conference);
-#endif
 
   if(!conference->GetForceScreenSplit())
   { PTRACE(1,"Conference\tOnCreateConference: \"Force split screen video\" unchecked, " << conference->GetNumber() << " skipping members.conf"); return; }
@@ -181,12 +181,17 @@ void ConferenceManager::OnCreateConference(Conference * conference)
 
 void ConferenceManager::OnDestroyConference(Conference * conference)
 {
-  PTRACE(2,"MCU\tOnDestroyConference " << conference->GetNumber());
+  PString number = conference->GetNumber();
+  PTRACE(2,"MCU\tOnDestroyConference " << number);
+  conference->stopping=TRUE;
 
-  // stop external recorder
+  PString jsName(number);
+  jsName.Replace("\"","\\x27",TRUE,0); jsName.Replace("'","\\x22",TRUE,0);
+  OpenMCU::Current().HttpWriteCmdRoom("notice_deletion(1,'" + jsName + "')", number);
+
   conference->StopRecorder();
 
-  PTRACE(2,"MCU\tOnDestroyConference " << conference->GetNumber() <<", disconnect remote endpoints");
+  PTRACE(2,"MCU\tOnDestroyConference " << number <<", disconnect remote endpoints");
   conference->GetMutex().Wait();
   for(Conference::MemberList::iterator r = conference->GetMemberList().begin(); r != conference->GetMemberList().end(); ++r)
   {
@@ -200,6 +205,8 @@ void ConferenceManager::OnDestroyConference(Conference * conference)
   }
   conference->GetMutex().Signal();
 
+  OpenMCU::Current().HttpWriteCmdRoom("notice_deletion(2,'" + jsName + "')", number);
+
   for(PINDEX i = 0; i < 100; i++)
   {
    PThread::Sleep(100);
@@ -207,24 +214,27 @@ void ConferenceManager::OnDestroyConference(Conference * conference)
      break;
   }
 
-  PTRACE(2,"MCU\tOnDestroyConference " << conference->GetNumber() <<", remove recorder and caches");
+  PTRACE(2,"MCU\tOnDestroyConference " << number <<", remove pipes and caches");
+  OpenMCU::Current().HttpWriteCmdRoom("notice_deletion(3,'" + jsName + "')", number);
   conference->GetMutex().Wait();
   for(Conference::MemberList::iterator r = conference->GetMemberList().begin(); r != conference->GetMemberList().end(); ++r)
   {
     ConferenceMember * member = r->second;
     if(member)
     {
-      if(member->GetType() == MEMBER_TYPE_PIPE || member->GetType() == MEMBER_TYPE_CACHE)
-        delete (ConferenceFileMember *)member;
+      if(member->GetType() == MEMBER_TYPE_PIPE)
+        delete (ConferencePipeMember *)member;
+      else if(member->GetType() == MEMBER_TYPE_CACHE)
+        delete (ConferenceCacheMember *)member;
     }
   }
+//  OpenMCU::Current().HttpWriteCmdRoom("notice_deletion(4,'" + jsName + "')", number);
 
-#ifndef _WIN32
   if(conference->conferenceRecorder)
     delete conference->conferenceRecorder;
-#endif
 
   conference->GetMutex().Signal();
+  OpenMCU::Current().HttpWriteCmdRoom("notice_deletion(5,'" + jsName + "')", number);
 }
 
 
@@ -496,6 +506,7 @@ Conference::Conference(        ConferenceManager & _manager,
 )
   : manager(_manager), guid(_guid), number(_number), name(_name), mcuNumber(_mcuNumber), mcuMonitorRunning(FALSE)
 {
+  stopping = FALSE;
 #if MCU_VIDEO
   VMLInit(_videoMixer);
 #endif
@@ -507,12 +518,7 @@ Conference::Conference(        ConferenceManager & _manager,
   VAlevel = 100;
   echoLevel = 0;
   vidmembernum = 0;
-  fileRecorder = NULL;
-#ifdef _WIN32
-  externalRecorder = NULL;
-#else
   conferenceRecorder = NULL;
-#endif
   forceScreenSplit = GetConferenceParam(number, ForceSplitVideoKey, TRUE);
   lockedTemplate = GetConferenceParam(number, LockTemplateKey, FALSE);
   PTRACE(3, "Conference\tNew conference started: ID=" << guid << ", number = " << number);
@@ -543,17 +549,10 @@ BOOL Conference::RecorderCheckSpace()
 
 BOOL Conference::StartRecorder()
 {
-#ifdef _WIN32
-  if(externalRecorder)
-    return TRUE;
-  if(!fileRecorder)
-    return FALSE;
-#else
   if(!conferenceRecorder)
     return FALSE;
   if(conferenceRecorder->IsRunning())
     return TRUE;
-#endif
 
   if(!RecorderCheckSpace())
     return FALSE;
@@ -564,17 +563,6 @@ BOOL Conference::StartRecorder()
     return FALSE;
   }
 
-#ifdef _WIN32
-  externalRecorder = new ExternalVideoRecorderThread(number);
-  // wait 1000ms to start recorder
-  for(int i = 0; i < 10; i++) if(externalRecorder->running) break; else PThread::Sleep(100);
-  if(!externalRecorder->running)
-  {
-    externalRecorder = NULL;
-    PTRACE(1,"MCU\tConference: " << number <<", failed to start recorder");
-    return FALSE;
-  }
-#else
   conferenceRecorder->Start();
   for(int i = 0; i < 10; i++) if(conferenceRecorder->IsRunning()) break; else PThread::Sleep(100);
   if(!conferenceRecorder->IsRunning())
@@ -582,7 +570,6 @@ BOOL Conference::StartRecorder()
     PTRACE(1,"MCU\tConference: " << number <<", failed to start recorder");
     return FALSE;
   }
-#endif
 
   PTRACE(1,"MCU\tConference: " << number <<", video recorder started");
   OpenMCU::Current().HttpWriteEventRoom("video recording started", number);
@@ -593,19 +580,11 @@ BOOL Conference::StartRecorder()
 
 BOOL Conference::StopRecorder()
 {
-#ifdef _WIN32
-  if(!externalRecorder)
-    return TRUE;
-  externalRecorder->running = FALSE;
-  PThread::Sleep(1000);
-  externalRecorder = NULL;
-#else
   if(!conferenceRecorder)
     return TRUE;
   if(!conferenceRecorder->IsRunning())
     return TRUE;
   conferenceRecorder->Stop();
-#endif
 
   PTRACE(1,"MCU\tConference: " << number <<", video recorder stopped");
   OpenMCU::Current().HttpWriteEventRoom("video recording stopped", number);

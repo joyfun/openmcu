@@ -9,6 +9,7 @@
   #define AV_CODEC_ID_AC3         CODEC_ID_AC3
   #define AV_CODEC_ID_H264        CODEC_ID_H264
   #define AV_CODEC_ID_MPEG4       CODEC_ID_MPEG4
+  #define AV_CODEC_ID_MSMPEG4V3   CODEC_ID_MSMPEG4V3
   #define AV_CODEC_ID_VP8         CODEC_ID_VP8
 #endif
 #if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(55, 0, 0)
@@ -227,9 +228,10 @@ BOOL ConferenceRecorder::Start()
   MCUConfig cfg("Parameters");
 
   // video
-  video_width = mcu.vr_framewidth;
-  video_height = mcu.vr_frameheight;
-  video_framerate = mcu.vr_framerate;
+  PString res = cfg.GetString(RecorderResolutionKey, PString(DefaultRecorderFrameWidth)+"x"+PString(DefaultRecorderFrameHeight));
+  video_width = res.Tokenise("x")[0].AsInteger();
+  video_height = res.Tokenise("x")[1].AsInteger();
+  video_framerate = cfg.GetInteger(RecorderFrameRateKey, DefaultRecorderFrameRate);
 
   unsigned max_fs = GetVideoMacroBlocks(video_width, video_height);
   for(int i = 0; recorder_resolutions[i].macroblocks != 0; ++i)
@@ -254,10 +256,10 @@ BOOL ConferenceRecorder::Start()
   else if(video_bitrate > 4000) video_bitrate = 4000;
 
   // audio
-  audio_samplerate = OpenMCU::Current().vr_sampleRate;
+  audio_samplerate = cfg.GetInteger(RecorderSampleRateKey, DefaultRecorderSampleRate);
+  audio_channels = cfg.GetInteger(RecorderAudioChansKey, DefaultRecorderAudioChans);
   if(audio_samplerate < 8000)       { audio_samplerate = 8000; PTRACE(1, trace_section << "sample rate changed to 8000"); }
   else if(audio_samplerate > 48000) { audio_samplerate = 48000; PTRACE(1, trace_section << "sample rate changed to 48000"); }
-  audio_channels = OpenMCU::Current().vr_audioChans;
   if(audio_channels < 1)      { audio_channels = 1; PTRACE(1, trace_section << "audio channels changed to 1"); }
   else if(audio_channels > 8) { audio_channels = 8; PTRACE(1, trace_section << "audio channels changed to 8"); }
   audio_bitrate = 64;
@@ -280,8 +282,8 @@ BOOL ConferenceRecorder::Start()
     << video_height << "x"
     << video_framerate;
   filename = t;
-  if((audio_codec_id == AV_CODEC_ID_AC3 || audio_codec_id == AV_CODEC_ID_NONE) && video_codec_id == AV_CODEC_ID_MPEG4)
-    format_name = "avi";
+  if((video_codec_id == AV_CODEC_ID_MPEG4 || video_codec_id == AV_CODEC_ID_MSMPEG4V3) && audio_codec_id != AV_CODEC_ID_PCM_S16LE)
+    format_name = "asf";
   else
     format_name = "mkv";
   filename += "."+format_name;

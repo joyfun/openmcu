@@ -13,14 +13,14 @@
 
 class MCUH323Connection;
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 class ConferenceSoundCardMember : public ConferenceMember
 {
   PCLASSINFO(ConferenceSoundCardMember, ConferenceMember);
   public:
     ConferenceSoundCardMember(Conference * _conference);
     ~ConferenceSoundCardMember();
-
-    void Unlisten();
 
     virtual ConferenceConnection * CreateConnection()
     { return new ConferenceConnection(this); }
@@ -42,6 +42,8 @@ class ConferenceSoundCardMember : public ConferenceMember
     PThread * thread;
 };
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 class ConferenceFileMember : public ConferenceMember
 {
   PCLASSINFO(ConferenceFileMember, ConferenceMember);
@@ -51,33 +53,16 @@ class ConferenceFileMember : public ConferenceMember
     typedef std::deque<PFilePath> FilenameList;
     ConferenceFileMember(Conference * conference, const FilenameList & _fns, PFile::OpenMode mode);
 
-    ConferenceFileMember(Conference * conference, const OpalMediaFormat & _fmt, PFile::OpenMode mode);
-    ConferenceFileMember(Conference * conference, const OpalMediaFormat & _fmt, PFile::OpenMode mode, unsigned _videoMixerNumber);
-
-    ConferenceFileMember(Conference * conference, const PString & _fmt, PFile::OpenMode mode);
-
     ~ConferenceFileMember();
-
-    void Unlisten();
 
     virtual ConferenceConnection * CreateConnection()
     { return new ConferenceConnection(this); }
 
     virtual PString GetName() const
-    {
-      if(vformat.GetLength()>0)
-      {
-        return "cache";
-      }
-      return PString(mode == PFile::ReadOnly ? "file player" : "file recorder") & currentFilename;
-    }
+    { return PString(mode == PFile::ReadOnly ? "file player" : "file recorder") & currentFilename; }
 
     virtual MemberTypes GetType()
-    {
-      if(GetName() == "cache")
-        return MEMBER_TYPE_CACHE;
-      return MEMBER_TYPE_PIPE;
-    }
+    { return MEMBER_TYPE_NONE; }
 
     virtual BOOL IsVisible() const
     { return FALSE; }
@@ -86,16 +71,6 @@ class ConferenceFileMember : public ConferenceMember
     { cout << "Received user input indication " << str << endl; }
 
     PDECLARE_NOTIFIER(PThread, ConferenceFileMember, ReadThread);
-    PDECLARE_NOTIFIER(PThread, ConferenceFileMember, WriteThread);
-    PDECLARE_NOTIFIER(PThread, ConferenceFileMember, WriteThreadV);
-    PDECLARE_NOTIFIER(PThread, ConferenceFileMember, EncoderCacheThread);
-
-    virtual PString GetFormat(){ return format; }
-    virtual PString GetVFormat(){ return vformat; }
-
-    H323Codec * codec;
-    MCUH323Connection * con;
-    int status;
 
   protected:
     void Construct();
@@ -103,20 +78,98 @@ class ConferenceFileMember : public ConferenceMember
 
     FilenameList filenames;
     PFilePath currentFilename;
-    PString format;
-    OpalMediaFormat vformat;
     PFile::OpenMode mode;
 
+    PThread * thread;
     OpalWAVFile file;
     BOOL running;
-    PThread * thread;
-    PThread * vthread;
 
     PString roomName;
-#ifndef _WIN32
-    PString audioPipeName, videoPipeName;
-#endif
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class ConferenceCacheMember : public ConferenceMember
+{
+  PCLASSINFO(ConferenceCacheMember, ConferenceMember);
+  public:
+    ConferenceCacheMember(Conference * conference, const OpalMediaFormat & _fmt, unsigned _videoMixerNumber);
+    ~ConferenceCacheMember();
+
+    virtual ConferenceConnection * CreateConnection()
+    { return new ConferenceConnection(this); }
+
+    virtual PString GetName() const
+    { return "cache"; }
+
+    virtual MemberTypes GetType()
+    { return MEMBER_TYPE_CACHE; }
+
+    virtual BOOL IsVisible() const
+    { return FALSE; }
+
+    void OnReceivedUserInputIndication(const PString & str)
+    { cout << "Received user input indication " << str << endl; }
+
+    virtual PString GetMediaFormat()
+    { return format; }
+
+    PDECLARE_NOTIFIER(PThread, ConferenceCacheMember, CacheThread);
+
+    H323Codec * codec;
+    MCUH323Connection * con;
+    int status;
+
+  protected:
+    OpalMediaFormat format;
+
+    PThread * thread;
+    BOOL running;
+
+    PString roomName;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class ConferencePipeMember : public ConferenceMember
+{
+  PCLASSINFO(ConferencePipeMember, ConferenceMember);
+
+  public:
+    ConferencePipeMember(Conference * conference);
+    ~ConferencePipeMember();
+
+    virtual ConferenceConnection * CreateConnection()
+    { return new ConferenceConnection(this); }
+
+    virtual PString GetName() const
+    { return PString("file recorder"); }
+
+    virtual MemberTypes GetType()
+    { return MEMBER_TYPE_PIPE; }
+
+    virtual BOOL IsVisible() const
+    { return FALSE; }
+
+    virtual PString GetFormat()
+    { return GetName(); }
+
+    void OnReceivedUserInputIndication(const PString & str)
+    { cout << "Received user input indication " << str << endl; }
+
+    PDECLARE_NOTIFIER(PThread, ConferencePipeMember, AudioThread);
+    PDECLARE_NOTIFIER(PThread, ConferencePipeMember, VideoThread);
+
+  protected:
+    PString roomName;
+    PString trace_section;
+    BOOL running;
+    PThread * audio_thread;
+    PThread * video_thread;
+    PString audioPipeName, videoPipeName;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class ConferenceFilePlayer : public ConferenceFileMember
 {

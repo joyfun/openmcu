@@ -238,7 +238,7 @@ void Conference::LoadTemplate(PString tpl)
               PString numberWithMixer=number;
               if(v[4]!="0") numberWithMixer+="/"+v[4];
               PString * userData = new PString(numberWithMixer);
-              InviteMember(memberAddress, userData);
+              OpenMCU::Current().GetEndpoint().Invite(numberWithMixer, memberAddress);
             }
           }
           validatedMembers.AppendString(memberInternalName);
@@ -658,5 +658,5 @@ void Conference::OnConnectionClean(const PString & remotePartyName, const PStrin
   if(!autoDial) return;
 
   PTRACE(2,"Conference\tGetting back member " << name);
-  InviteMember(name);
+  OpenMCU::Current().GetEndpoint().Invite(number, name);
 }

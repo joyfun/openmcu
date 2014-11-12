@@ -258,4 +258,4 @@ window.l_filesize                                  = "Размер файла";
 window.l_resolution                                = "Разрешение";
 window.l_startdatetime                             = "Дата и время начала";
 
-window.l_lock_tpl_default                          = "Отключать терминалы, отсутствующие в шаблоне (закрыть конференцию)";
+window.l_lock_tpl_default                          = "Отключать терминалы, отсутствующие в шаблоне (запереть конференцию)";

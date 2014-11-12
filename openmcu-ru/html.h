@@ -392,7 +392,7 @@ class TablePConfigPage : public PConfigPage
    }
    PString JsLocal(PString token)
    {
-     return "<script type='text/javascript'>document.write(window."+token+");</script>";
+     return "<script type='text/javascript'>document.write(window.l_"+token+");</script>";
    }
    PString buttons()
    {

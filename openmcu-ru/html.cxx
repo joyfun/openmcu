@@ -380,7 +380,7 @@ ConferencePConfigPage::ConferencePConfigPage(PHTTPServiceProcess & app,const PSt
   s << ColumnItem(JsLocal("l_name_auto_delete_empty"));
   s << ColumnItem(JsLocal("l_name_auto_record_not_empty"));
   s << ColumnItem(JsLocal("l_name_recall_last_template"));
-  s << ColumnItem("Template locks conference by default");
+  s << ColumnItem(JsLocal("l_lock_tpl_default"));
   s << ColumnItem(JsLocal("l_name_time_limit"));
   optionNames.AppendString(RoomAutoCreateKey);
   optionNames.AppendString(ForceSplitVideoKey);
